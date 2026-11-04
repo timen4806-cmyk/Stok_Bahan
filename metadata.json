@@ -1,0 +1,6 @@
+{
+  "name": "Sinar Mas Aluminium",
+  "description": "Aplikasi manajemen inventaris dan stok bahan aluminium Sinar Mas dengan pemantauan real-time, ekspor PDF/Excel, dan analisis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

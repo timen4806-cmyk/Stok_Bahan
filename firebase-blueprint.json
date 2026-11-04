@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "BahanItem": {
+      "title": "BahanItem",
+      "description": "Item bahan aluminium stok inventaris Sinar Mas",
+      "type": "object",
+      "properties": {
+        "nama": {
+          "type": "string",
+          "description": "Nama bahan atau profil aluminium"
+        },
+        "nilai1": {
+          "type": "string",
+          "description": "Catatan atau jumlah kolom 1"
+        },
+        "nilai2": {
+          "type": "string",
+          "description": "Catatan atau jumlah kolom 2"
+        },
+        "nilai3": {
+          "type": "string",
+          "description": "Catatan atau jumlah kolom 3"
+        },
+        "nilai4": {
+          "type": "string",
+          "description": "Catatan atau jumlah kolom 4"
+        },
+        "nilai5": {
+          "type": "string",
+          "description": "Catatan atau jumlah kolom 5"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembuatan dibuat dengan FieldValue.serverTimestamp()"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu perubahan terakhir dibuat dengan FieldValue.serverTimestamp()"
+        }
+      },
+      "required": ["nama"]
+    },
+    "Pengaturan": {
+      "title": "Pengaturan",
+      "description": "Konfigurasi judul dan nama kolom tabel inventaris",
+      "type": "object",
+      "properties": {
+        "judul": {
+          "type": "string",
+          "description": "Judul laporan atau tabel"
+        },
+        "kolom1": {
+          "type": "string",
+          "description": "Nama label kolom 1"
+        },
+        "kolom2": {
+          "type": "string",
+          "description": "Nama label kolom 2"
+        },
+        "kolom3": {
+          "type": "string",
+          "description": "Nama label kolom 3"
+        },
+        "kolom4": {
+          "type": "string",
+          "description": "Nama label kolom 4"
+        },
+        "kolom5": {
+          "type": "string",
+          "description": "Nama label kolom 5"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu perubahan pengaturan"
+        }
+      },
+      "required": ["judul"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil keamanan sesi, 2FA, dan preferensi pengguna",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Alamat email terdaftar pengguna"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Nama tampilan pengguna"
+        },
+        "twoFactorEnabled": {
+          "type": "boolean",
+          "description": "Status pengaktifan otentikasi dua faktor"
+        },
+        "twoFactorPin": {
+          "type": "string",
+          "description": "Hash atau kode PIN keamanan 2FA"
+        },
+        "autoBackupCloud": {
+          "type": "boolean",
+          "description": "Pencadangan cloud otomatis aktif"
+        },
+        "themeMode": {
+          "type": "string",
+          "description": "Preferensi tema: SYSTEM, LIGHT, atau DARK"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembuatan profil"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembaruan profil"
+        }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/bahan/{bahanId}": {
+      "schema": {
+        "$ref": "#/entities/BahanItem"
+      },
+      "description": "Daftar inventaris bahan aluminium milik pengguna"
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/Pengaturan"
+      },
+      "description": "Pengaturan tabel dan label kolom pengguna"
+    },
+    "/users/{userId}/profile/{profileId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Data profil keamanan pengguna dan preferensi"
+    }
+  }
+}

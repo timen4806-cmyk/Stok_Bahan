@@ -1,0 +1,94 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidBahan(data) {
+      return data.nama is string && data.nama.size() > 0 && data.nama.size() <= 200 &&
+             (!('nilai1' in data) || (data.nilai1 is string && data.nilai1.size() <= 200)) &&
+             (!('nilai2' in data) || (data.nilai2 is string && data.nilai2.size() <= 200)) &&
+             (!('nilai3' in data) || (data.nilai3 is string && data.nilai3.size() <= 200)) &&
+             (!('nilai4' in data) || (data.nilai4 is string && data.nilai4.size() <= 200)) &&
+             (!('nilai5' in data) || (data.nilai5 is string && data.nilai5.size() <= 200)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidPengaturan(data) {
+      return data.judul is string && data.judul.size() > 0 && data.judul.size() <= 100 &&
+             (!('kolom1' in data) || (data.kolom1 is string && data.kolom1.size() <= 100)) &&
+             (!('kolom2' in data) || (data.kolom2 is string && data.kolom2.size() <= 100)) &&
+             (!('kolom3' in data) || (data.kolom3 is string && data.kolom3.size() <= 100)) &&
+             (!('kolom4' in data) || (data.kolom4 is string && data.kolom4.size() <= 100)) &&
+             (!('kolom5' in data) || (data.kolom5 is string && data.kolom5.size() <= 100)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidProfile(data) {
+      return data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('twoFactorEnabled' in data) || data.twoFactorEnabled is bool) &&
+             (!('twoFactorPin' in data) || (data.twoFactorPin is string && data.twoFactorPin.size() <= 100)) &&
+             (!('autoBackupCloud' in data) || data.autoBackupCloud is bool) &&
+             (!('themeMode' in data) || (data.themeMode is string && (data.themeMode == 'SYSTEM' || data.themeMode == 'LIGHT' || data.themeMode == 'DARK'))) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    match /users/{userId} {
+      match /bahan/{bahanId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(bahanId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(bahanId) &&
+                         isValidBahan(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(bahanId) &&
+                         isValidBahan(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'nilai1', 'nilai2', 'nilai3', 'nilai4', 'nilai5', 'updatedAt']);
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(bahanId);
+      }
+
+      match /settings/{settingId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(settingId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(settingId) &&
+                         isValidPengaturan(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(settingId) &&
+                         isValidPengaturan(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['judul', 'kolom1', 'kolom2', 'kolom3', 'kolom4', 'kolom5', 'updatedAt']);
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(settingId);
+      }
+
+      match /profile/{profileId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(profileId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(profileId) &&
+                         isValidProfile(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(profileId) &&
+                         isValidProfile(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['email', 'displayName', 'twoFactorEnabled', 'twoFactorPin', 'autoBackupCloud', 'themeMode', 'updatedAt']);
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(profileId);
+      }
+    }
+  }
+}
