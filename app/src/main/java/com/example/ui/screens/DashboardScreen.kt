@@ -34,7 +34,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Search
@@ -42,6 +45,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TableChart
+import com.example.util.DocumentExporter
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -118,6 +122,7 @@ fun DashboardScreen(
     val selectedCategory by stokViewModel.selectedCategory.collectAsState()
     val isSyncing by stokViewModel.isSyncing.collectAsState()
     val statusMessage by stokViewModel.statusMessage.collectAsState()
+    val lastExportResult by stokViewModel.lastExportResult.collectAsState()
 
     var showMenu by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -695,6 +700,121 @@ fun DashboardScreen(
                 ButtonDefaults.textButtonColors()
                 androidx.compose.material3.TextButton(onClick = { itemToDelete = null }) {
                     Text("Batal")
+                }
+            }
+        )
+    }
+
+    if (lastExportResult != null) {
+        val exportInfo = lastExportResult!!
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { stokViewModel.dismissExportResult() },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = SinarMasGold,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Tersimpan di Memori Internal",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Berkas telah dibuat dan disimpan langsung ke memori internal HP:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    tint = SinarMasBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Folder: ${exportInfo.folderPath}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (exportInfo.mimeType.contains("pdf")) Icons.Default.PictureAsPdf else Icons.Default.TableChart,
+                                    contentDescription = null,
+                                    tint = if (exportInfo.mimeType.contains("pdf")) DangerRed else SinarMasBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = exportInfo.fileName,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "💡 Berkas dapat langsung Anda temukan di aplikasi Pengelola Berkas / File Saya / Download di HP dalam folder 'SinarMasAluminium'.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        DocumentExporter.openFile(context, exportInfo)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SinarMasBlue)
+                ) {
+                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Buka Berkas")
+                }
+            },
+            dismissButton = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = {
+                            DocumentExporter.openDownloadsFolder(context)
+                        }
+                    ) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Buka Folder")
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    OutlinedButton(
+                        onClick = {
+                            DocumentExporter.shareFile(context, exportInfo)
+                        }
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Bagikan")
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    androidx.compose.material3.TextButton(onClick = { stokViewModel.dismissExportResult() }) {
+                        Text("Tutup")
+                    }
                 }
             }
         )

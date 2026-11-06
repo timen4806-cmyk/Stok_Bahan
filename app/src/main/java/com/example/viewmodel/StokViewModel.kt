@@ -9,6 +9,7 @@ import com.example.data.model.Pengaturan
 import com.example.data.model.UserProfile
 import com.example.data.repository.StokRepository
 import com.example.util.DocumentExporter
+import com.example.util.ExportResult
 import com.example.util.NotificationHelper
 import com.example.util.SecurityUtils
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,13 @@ class StokViewModel(
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    private val _lastExportResult = MutableStateFlow<ExportResult?>(null)
+    val lastExportResult: StateFlow<ExportResult?> = _lastExportResult.asStateFlow()
+
+    fun dismissExportResult() {
+        _lastExportResult.value = null
+    }
 
     val rawMaterials: StateFlow<List<BahanItem>> = repository.observeBahan(userId)
         .stateIn(
@@ -226,11 +234,15 @@ class StokViewModel(
         viewModelScope.launch {
             _isSyncing.value = true
             try {
-                val file = withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     DocumentExporter.exportToPdf(context, settings.value, rawMaterials.value)
                 }
-                _statusMessage.value = "PDF berhasil diekspor (${file.name})"
-                DocumentExporter.shareFile(context, file, "application/pdf", "Laporan Stok Sinar Mas Aluminium (PDF)")
+                _lastExportResult.value = result
+                _statusMessage.value = "PDF berhasil disimpan di ${result.folderPath}/${result.fileName}"
+                notificationHelper.showNotification(
+                    title = "Ekspor PDF Selesai",
+                    message = "Tersimpan di memori internal: ${result.folderPath}/${result.fileName}"
+                )
             } catch (e: Exception) {
                 _statusMessage.value = "Gagal membuat PDF: ${e.localizedMessage}"
             } finally {
@@ -255,11 +267,15 @@ class StokViewModel(
         viewModelScope.launch {
             _isSyncing.value = true
             try {
-                val file = withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     DocumentExporter.exportToExcel(context, settings.value, rawMaterials.value)
                 }
-                _statusMessage.value = "Excel/CSV berhasil diekspor (${file.name})"
-                DocumentExporter.shareFile(context, file, "text/csv", "Data Stok Sinar Mas Aluminium (Excel)")
+                _lastExportResult.value = result
+                _statusMessage.value = "Excel/CSV berhasil disimpan di ${result.folderPath}/${result.fileName}"
+                notificationHelper.showNotification(
+                    title = "Ekspor Excel Selesai",
+                    message = "Tersimpan di memori internal: ${result.folderPath}/${result.fileName}"
+                )
             } catch (e: Exception) {
                 _statusMessage.value = "Gagal membuat berkas Excel: ${e.localizedMessage}"
             } finally {

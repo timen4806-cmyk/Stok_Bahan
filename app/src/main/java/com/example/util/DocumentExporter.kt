@@ -1,5 +1,7 @@
 package com.example.util
 
+import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -7,15 +9,20 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.print.PageRange
 import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.print.PrintManager
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.data.model.BahanItem
 import com.example.data.model.Pengaturan
@@ -27,21 +34,33 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+data class ExportResult(
+    val success: Boolean,
+    val fileName: String,
+    val folderPath: String = "Download/SinarMasAluminium",
+    val uri: Uri?,
+    val file: File?,
+    val mimeType: String,
+    val message: String
+)
+
 object DocumentExporter {
 
-    private val dateFormat = SimpleDateFormat("dd MMMM yyyy, HH:mm", Locale.forLanguageTag("id-ID"))
+    private const val EXPORT_FOLDER_NAME = "SinarMasAluminium"
+    private val displayDateFormat = SimpleDateFormat("dd MMMM yyyy, HH:mm", Locale.forLanguageTag("id-ID"))
+    private val fileTimestampFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
 
     /**
-     * Generates a high-quality multi-page PDF report matching A4 dimensions.
+     * Generates a multi-page A4 PDF report and saves it directly to Internal Storage (Download/SinarMasAluminium).
      */
     fun exportToPdf(
         context: Context,
         settings: Pengaturan,
         items: List<BahanItem>
-    ): File {
+    ): ExportResult {
         val document = PdfDocument()
-        val pageWidth = 595 // A4 standard width in points
-        val pageHeight = 842 // A4 standard height in points
+        val pageWidth = 595 // A4 width in points
+        val pageHeight = 842 // A4 height in points
 
         val headerPaint = Paint().apply {
             color = Color.parseColor("#14213D")
@@ -96,6 +115,8 @@ object DocumentExporter {
         val colWidths = floatArrayOf(25f, 150f, 75f, 75f, 75f, 75f, 75f)
         val startX = 20f
 
+        val nowStr = displayDateFormat.format(Date())
+
         for (pageIndex in 0 until totalPages) {
             val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageIndex + 1).create()
             val page = document.startPage(pageInfo)
@@ -104,7 +125,6 @@ object DocumentExporter {
             // Header Banner
             canvas.drawRect(0f, 0f, pageWidth.toFloat(), 64f, headerPaint)
             canvas.drawText("SINAR MAS ALUMINIUM", startX, 28f, textPaint)
-            val nowStr = dateFormat.format(Date())
             canvas.drawText(
                 "${settings.judul} — Dicetak: $nowStr",
                 startX,
@@ -187,25 +207,72 @@ object DocumentExporter {
             document.finishPage(page)
         }
 
-        val cacheDir = File(context.cacheDir, "exports")
-        if (!cacheDir.exists()) cacheDir.mkdirs()
-        val outputFile = File(cacheDir, "stok_bahan_sinarmas.pdf")
-        val outputStream = FileOutputStream(outputFile)
-        document.writeTo(outputStream)
+        val timeStamp = fileTimestampFormat.format(Date())
+        val fileName = "Laporan_Stok_Sinar_Mas_$timeStamp.pdf"
+
+        // 1. Save local copy for FileProvider & PrintManager fallback
+        val cacheExportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        val cacheFile = File(cacheExportsDir, fileName)
+        FileOutputStream(cacheFile).use { out ->
+            document.writeTo(out)
+        }
         document.close()
-        outputStream.close()
-        return outputFile
+
+        // 2. Save directly to Internal Storage: Download/SinarMasAluminium
+        var publicUri: Uri? = null
+        val targetFolder = "Download/$EXPORT_FOLDER_NAME"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$EXPORT_FOLDER_NAME")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { output ->
+                    FileInputStream(cacheFile).use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                contentValues.clear()
+                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+                publicUri = uri
+            }
+        } else {
+            // Android 9 and lower
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val customFolder = File(downloadsDir, EXPORT_FOLDER_NAME).apply { mkdirs() }
+            val publicFile = File(customFolder, fileName)
+            cacheFile.copyTo(publicFile, overwrite = true)
+            MediaScannerConnection.scanFile(context, arrayOf(publicFile.absolutePath), arrayOf("application/pdf"), null)
+            publicUri = Uri.fromFile(publicFile)
+        }
+
+        return ExportResult(
+            success = true,
+            fileName = fileName,
+            folderPath = targetFolder,
+            uri = publicUri ?: FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cacheFile),
+            file = cacheFile,
+            mimeType = "application/pdf",
+            message = "PDF tersimpan di folder $targetFolder/$fileName"
+        )
     }
 
     /**
-     * Native Android PrintManager integration for instant PrintView and printing to physical printer or save to PDF.
+     * Native Android PrintManager integration for instant PrintView and physical printing.
      */
     fun printReport(
         context: Context,
         settings: Pengaturan,
         items: List<BahanItem>
     ) {
-        val pdfFile = exportToPdf(context, settings, items)
+        val exportResult = exportToPdf(context, settings, items)
+        val pdfFile = exportResult.file ?: return
         val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager ?: return
 
         val printAdapter = object : PrintDocumentAdapter() {
@@ -253,24 +320,27 @@ object DocumentExporter {
     }
 
     /**
-     * Exports inventory data to Excel format (CSV with UTF-8 BOM, fully recognized by Microsoft Excel and Google Sheets).
+     * Exports inventory data to Excel CSV format with UTF-8 BOM, saved directly to Internal Storage (Download/SinarMasAluminium).
      */
     fun exportToExcel(
         context: Context,
         settings: Pengaturan,
         items: List<BahanItem>
-    ): File {
-        val cacheDir = File(context.cacheDir, "exports")
-        if (!cacheDir.exists()) cacheDir.mkdirs()
-        val file = File(cacheDir, "stok_bahan_sinarmas.csv")
+    ): ExportResult {
+        val timeStamp = fileTimestampFormat.format(Date())
+        val fileName = "Data_Stok_Sinar_Mas_$timeStamp.csv"
 
-        val writer = FileWriter(file)
-        // UTF-8 BOM so Excel opens accents and symbols seamlessly
+        // 1. Write local cache copy
+        val cacheExportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        val cacheFile = File(cacheExportsDir, fileName)
+
+        val writer = FileWriter(cacheFile)
+        // UTF-8 BOM so Microsoft Excel & Google Sheets parse headers and characters properly
         writer.write("\uFEFF")
 
         // Title row
         writer.write("\"${settings.judul.replace("\"", "\"\"")}\"\n")
-        writer.write("\"Dicetak: ${dateFormat.format(Date())}\"\n\n")
+        writer.write("\"Dicetak: ${displayDateFormat.format(Date())}\"\n\n")
 
         // Header row
         val headers = listOf(
@@ -301,11 +371,123 @@ object DocumentExporter {
 
         writer.flush()
         writer.close()
-        return file
+
+        // 2. Save directly to Internal Storage: Download/SinarMasAluminium
+        var publicUri: Uri? = null
+        val targetFolder = "Download/$EXPORT_FOLDER_NAME"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$EXPORT_FOLDER_NAME")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { output ->
+                    FileInputStream(cacheFile).use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                contentValues.clear()
+                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+                publicUri = uri
+            }
+        } else {
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val customFolder = File(downloadsDir, EXPORT_FOLDER_NAME).apply { mkdirs() }
+            val publicFile = File(customFolder, fileName)
+            cacheFile.copyTo(publicFile, overwrite = true)
+            MediaScannerConnection.scanFile(context, arrayOf(publicFile.absolutePath), arrayOf("text/csv"), null)
+            publicUri = Uri.fromFile(publicFile)
+        }
+
+        return ExportResult(
+            success = true,
+            fileName = fileName,
+            folderPath = targetFolder,
+            uri = publicUri ?: FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cacheFile),
+            file = cacheFile,
+            mimeType = "text/csv",
+            message = "Excel/CSV tersimpan di folder $targetFolder/$fileName"
+        )
+    }
+
+    /**
+     * Opens the exported file with user's installed PDF reader or Excel viewer.
+     */
+    fun openFile(context: Context, result: ExportResult) {
+        val uriToOpen = if (result.file != null && result.file.exists()) {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", result.file)
+        } else {
+            result.uri
+        } ?: return
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uriToOpen, result.mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            context.startActivity(Intent.createChooser(intent, "Buka Berkas ${result.fileName}"))
+        } catch (_: Exception) {
+            Toast.makeText(context, "Tidak ada aplikasi pembuka file untuk ${result.mimeType}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Opens Android system Downloads file manager.
+     */
+    fun openDownloadsFolder(context: Context) {
+        val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            val fallback = Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "*/*"
+                addCategory(Intent.CATEGORY_OPENABLE)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(fallback)
+            } catch (_: Exception) {
+                Toast.makeText(
+                    context,
+                    "Buka aplikasi Pengelola File / File Saya > Folder Download > $EXPORT_FOLDER_NAME",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     /**
      * Shares file via FileProvider to WhatsApp, Telegram, Gmail, etc.
+     */
+    fun shareFile(context: Context, result: ExportResult, subject: String = "Laporan Sinar Mas Aluminium") {
+        val uri: Uri = if (result.file != null && result.file.exists()) {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", result.file)
+        } else {
+            result.uri
+        } ?: return
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = result.mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(intent, "Bagikan Dokumen"))
+    }
+
+    /**
+     * Legacy share method for backwards compatibility.
      */
     fun shareFile(context: Context, file: File, mimeType: String, subject: String) {
         val uri: Uri = FileProvider.getUriForFile(
