@@ -88,6 +88,19 @@ APP_BASE_NAME=${0##*/}
 # Discard cd standard output in case $CDPATH is set (https://github.com/gradle/gradle/issues/25036)
 APP_HOME=$( cd -P "${APP_HOME:-./}" > /dev/null && printf '%s\n' "$PWD" ) || exit
 
+# Auto-restore release and debug keystores if base64 files exist
+if [ ! -f "$APP_HOME/my-upload-key.jks" ] && [ -f "$APP_HOME/my-upload-key.jks.base64" ]; then
+    base64 -d "$APP_HOME/my-upload-key.jks.base64" > "$APP_HOME/my-upload-key.jks" 2>/dev/null || true
+fi
+if [ ! -f "$APP_HOME/debug.keystore" ] && [ -f "$APP_HOME/debug.keystore.base64" ]; then
+    base64 -d "$APP_HOME/debug.keystore.base64" > "$APP_HOME/debug.keystore" 2>/dev/null || true
+fi
+
+# Default signing credentials for release builds if not explicitly provided
+export STORE_PASSWORD="${STORE_PASSWORD:-android}"
+export KEY_PASSWORD="${KEY_PASSWORD:-android}"
+export KEYSTORE_PATH="${KEYSTORE_PATH:-$APP_HOME/my-upload-key.jks}"
+
 # Use the maximum available, or set MAX_FD != -1 to use that value.
 MAX_FD=maximum
 

@@ -29,17 +29,30 @@ jobs:
           if [ ! -f ".env" ] && [ -f ".env.example" ]; then
             cp .env.example .env
           fi
-          if [ -f "debug.keystore.base64" ]; then
+          if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
             base64 -d debug.keystore.base64 > debug.keystore
           elif [ ! -f "debug.keystore" ]; then
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          if [ -f "my-upload-key.jks.base64" ] && [ ! -f "my-upload-key.jks" ]; then
+            base64 -d my-upload-key.jks.base64 > my-upload-key.jks
           fi
 
       - name: Run Unit Tests
         run: ./gradlew testDebugUnitTest --continue || true
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build Debug & Release APKs
+        env:
+          STORE_PASSWORD: android
+          KEY_PASSWORD: android
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sinarmas-aluminium-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
@@ -47,3 +60,4 @@ jobs:
           name: sinarmas-aluminium-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
+
